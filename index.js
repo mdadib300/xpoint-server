@@ -1,3 +1,4 @@
+// Imports
 const express = require('express')
 const cors = require('cors')
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
@@ -5,13 +6,121 @@ const app = express()
 const port = process.env.PORT || 3000
 require('dotenv').config()
 const jwt = require('jsonwebtoken');
+const nodemailer = require("nodemailer");
 
+
+// Middleware
 app.use(cors())
 app.use(express.json())
 
 app.get('/', (req, res) => {
   res.send('Hello World!')
 })
+
+// Nodemailer transporter
+const transporter = nodemailer.createTransport({
+  service: "gmail",
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
+
+// Nodemailer email sending
+const sendOrderEmails = async (order) => {
+  try {
+
+    const cartItemsHtml = order.cartItems.map(item => {
+      return `
+        <tr>
+          <td style="padding:5px;border:1px solid #ddd;">${item.productName}</td>
+          <td style="padding:5px;border:1px solid #ddd;">${item.size || '-'}</td>
+          <td style="padding:5px;border:1px solid #ddd;">${item.color || '-'}</td>
+          <td style="padding:5px;border:1px solid #ddd;">${item.quantity || 1}</td>
+          <td style="padding:5px;border:1px solid #ddd;">${item.price} BDT</td>
+        </tr>
+      `;
+    }).join('');
+
+    const orderDate = new Date(order.orderTime).toLocaleString();
+
+    // ---------------- USER EMAIL ----------------
+    await transporter.sendMail({
+      from: process.env.SMTP_USER,
+      to: order.email,
+      subject: "Order Placed Successfully",
+      html: `
+        <h3>Hi ${order.name},</h3>
+        <p>Your order has been placed successfully.</p>
+        <p>Please wait for confirmation from our team.</p>
+
+        <h3>Order Details:</h3>
+
+        <table style="border-collapse: collapse; width: 100%;">
+          <thead>
+            <tr>
+              <th style="border:1px solid #ddd;">Product</th>
+              <th style="border:1px solid #ddd;">Size</th>
+              <th style="border:1px solid #ddd;">Color</th>
+              <th style="border:1px solid #ddd;">Qty</th>
+              <th style="border:1px solid #ddd;">Price</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${cartItemsHtml}
+          </tbody>
+        </table>
+
+        <p><b>Total: ${order.amount} BDT</b></p>
+        <p><b>Payment:</b> ${order.paymentMethod}</p>
+        
+        <p>We will contact you soon.</p>
+        <p>- XPoint</p>
+      `,
+    });
+
+    // ---------------- ADMIN EMAIL ----------------
+    await transporter.sendMail({
+      from: process.env.SMTP_USER,
+      to: process.env.SMTP_USER,
+      subject: "New Order Placed",
+      html: `
+        <h2>New Order Received, check dashboard for further action.</h2>
+
+        <p><b>Name:</b> ${order.name}</p>
+        <p><b>Email:</b> ${order.email}</p>
+        <p><b>Phone:</b> ${order.phone}</p>
+        <p><b>Address:</b> ${order.address}</p>
+        <p><b>Delivery:</b> ${order.deliveryLocation}</p>
+        <p><b>Time:</b> ${orderDate}</p>
+        <p><b>Payment:</b> ${order.paymentMethod}</p>
+
+        <h3>Products:</h3>
+
+        <table style="border-collapse: collapse; width: 100%;">
+          <thead>
+            <tr>
+              <th style="border:1px solid #ddd;">Product</th>
+              <th style="border:1px solid #ddd;">Size</th>
+              <th style="border:1px solid #ddd;">Color</th>
+              <th style="border:1px solid #ddd;">Qty</th>
+              <th style="border:1px solid #ddd;">Price</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${cartItemsHtml}
+          </tbody>
+        </table>
+
+        <p><b>Total: ${order.amount} BDT</b></p>
+      `,
+    });
+
+    console.log("✅ Emails sent");
+  } catch (error) {
+    console.error("❌ Email error:", error);
+  }
+};
 
 // -------------------- MongoDB --------------------
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@xpointcluster.j3qynmm.mongodb.net/?retryWrites=true&w=majority&appName=XpointCluster`;
@@ -128,10 +237,13 @@ async function run() {
 
     // Displaying the products in the UI 
     app.get('/products', async (req, res) => {
-      const cursor = productsCollection.find();
+      const cursor = productsCollection
+        .find()
+        .sort({ _id: -1 }); // latest products first
+
       const allProducts = await cursor.toArray();
       res.send(allProducts);
-    })
+    });
 
     // adding products in the products server (ADMIN ONLY)
     app.post('/products', verifyToken, verifyAdmin, async (req, res) => {
@@ -214,7 +326,13 @@ async function run() {
     // posting orders to orders server
     app.post('/orders', async (req, res) => {
       const order = req.body;
-      const result = await ordersCollection.insertOne(order);
+
+      const result = await ordersCollection.insertOne(order); 
+
+      if (result.insertedId) {
+        sendOrderEmails(order); // NodeMailer Email
+      }
+
       res.send(result);
     });
 
