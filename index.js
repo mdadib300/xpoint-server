@@ -157,13 +157,27 @@ async function run() {
     app.post('/users', async (req, res) => {
       const user = req.body;
       const query = { email: user.email }
+
       const existingUser = await usersCollection.findOne(query);
       if (existingUser) {
         return res.send({ message: 'User already exists', insertedId: null })
       }
-      const result = await usersCollection.insertOne(user);
+
+      const newUser = {
+        name: user.name || "User",
+        email: user.email,
+        photoURL: user.photoURL || "",
+        role: "user",
+        phone: "",
+        address: "",
+        createdAt: new Date(),
+      };
+
+      const result = await usersCollection.insertOne(newUser);
       res.send(result);
-    })
+    });
+
+
 
     // middleswares
     const verifyToken = (req, res, next) => {
@@ -206,6 +220,36 @@ async function run() {
       }
       res.send({ admin });
     })
+
+    // Get user info
+    app.get('/users/profile', verifyToken, async (req, res) => {
+      const email = req.decoded.email;
+
+      const user = await usersCollection.findOne({ email });
+
+      res.send(user);
+    });
+
+    // update user info
+    app.patch('/users/profile', verifyToken, async (req, res) => {
+      const email = req.decoded.email;
+
+      const updatedData = req.body;
+
+      const result = await usersCollection.updateOne(
+        { email },
+        {
+          $set: {
+            name: updatedData.name,
+            photoURL: updatedData.photoURL,
+            phone: updatedData.phone,
+            address: updatedData.address
+          }
+        }
+      );
+
+      res.send(result);
+    });
 
     // View all users in server (ADMIN ONLY)
     app.get('/users', verifyToken, verifyAdmin, async (req, res) => {
@@ -261,35 +305,39 @@ async function run() {
     })
 
     // Updating a product info (ADMIN ONLY)
-    // Getting the info first
+
+    // Get single product
     app.get('/products/:id', async (req, res) => {
       const id = req.params.id;
-      const query = { _id: new ObjectId(id) }
+      const query = { _id: new ObjectId(id) };
       const result = await productsCollection.findOne(query);
       res.send(result);
-    })
-    // Now patching the info
+    });
+
+    // Update product
     app.patch('/products/:id', verifyToken, verifyAdmin, async (req, res) => {
       const product = req.body;
       const id = req.params.id;
-      const filter = { _id: new ObjectId(id) }
+
+      const filter = { _id: new ObjectId(id) };
+
       const updatedDoc = {
         $set: {
           name: product.name,
           category: product.category,
           price: product.price,
+          discountPrice: product.discountPrice || null,
           fit: product.fit,
           sizes: product.sizes,
           colors: product.colors,
-          stock: product.stock,
-          image1: product.image1,
-          image2: product.image2,
-          image3: product.image3
+          description: product.description,
+          images: product.images
         }
-      }
+      };
+
       const result = await productsCollection.updateOne(filter, updatedDoc);
       res.send(result);
-    })
+    });
 
     // Getting products details for the Product Details page when clicked to View Details
     app.get('/products/:id', verifyToken, verifyAdmin, async (req, res) => {
@@ -327,7 +375,7 @@ async function run() {
     app.post('/orders', async (req, res) => {
       const order = req.body;
 
-      const result = await ordersCollection.insertOne(order); 
+      const result = await ordersCollection.insertOne(order);
 
       if (result.insertedId) {
         sendOrderEmails(order); // NodeMailer Email
