@@ -6,7 +6,7 @@ const app = express()
 const port = process.env.PORT || 3000
 require('dotenv').config()
 const jwt = require('jsonwebtoken');
-const nodemailer = require("nodemailer");
+import { Resend } from 'resend';
 
 
 // Middlewares
@@ -17,38 +17,26 @@ app.get('/', (req, res) => {
   res.send('Hello World!')
 })
 
-// Nodemailer Transporter (Hostinger SMTP)
-const transporter = nodemailer.createTransport({
-  host: "smtp.hostinger.com",
-  port: 587,
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-  },
-});
+// Resend api key
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-// Nodemailer email sending
+// Email function (resend)
 const sendOrderEmails = async (order) => {
   try {
-
-    const cartItemsHtml = order.cartItems.map(item => {
-      return `
-        <tr>
+    const cartItemsHtml = order.cartItems.map(item => `
+      <tr>
           <td style="padding:5px;border:1px solid #ddd;">${item.productName}</td>
           <td style="padding:5px;border:1px solid #ddd;">${item.size || '-'}</td>
           <td style="padding:5px;border:1px solid #ddd;">${item.color || '-'}</td>
           <td style="padding:5px;border:1px solid #ddd;">${item.quantity || 1}</td>
           <td style="padding:5px;border:1px solid #ddd;">${item.price} BDT</td>
         </tr>
-      `;
-    }).join('');
+    `).join('');
 
     const orderDate = new Date(order.orderTime).toLocaleString();
-
     // ---------------- CUSTOMER EMAIL ----------------
-    await transporter.sendMail({
-      from: `"XPoint" <${process.env.SMTP_USER}>`,
+    await resend.emails.send({
+      from: "XPoint <onboarding@resend.dev>",
       to: order.email,
       subject: "Order Placed Successfully",
       html: `
@@ -81,13 +69,10 @@ const sendOrderEmails = async (order) => {
       `,
     });
 
-    // SMALL DELAY
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
     // ---------------- ADMIN EMAIL ----------------
-    await transporter.sendMail({
-      from: `"XPoint Orders" <${process.env.SMTP_USER}>`,
-      to: process.env.SMTP_ADMIN,
+    await resend.emails.send({
+      from: "XPoint Orders <onboarding@resend.dev>",
+      to: process.env.ADMIN_EMAIL,
       subject: "New Order Received",
       html: `
         <h2>Another ordrer reveived, check dashboard for further action.</h2>
@@ -121,9 +106,10 @@ const sendOrderEmails = async (order) => {
       `,
     });
 
-    console.log("Emails sent");
+    console.log("✅ Emails sent with Resend");
+
   } catch (error) {
-    console.error("Email error:", error);
+    console.error("❌ Email error:", error);
   }
 };
 
