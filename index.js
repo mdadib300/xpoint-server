@@ -9,7 +9,7 @@ const jwt = require('jsonwebtoken');
 const nodemailer = require("nodemailer");
 
 
-// Middleware
+// Middlewares
 app.use(cors())
 app.use(express.json())
 
@@ -17,9 +17,11 @@ app.get('/', (req, res) => {
   res.send('Hello World!')
 })
 
-// Nodemailer transporter
+// Nodemailer Transporter (Hostinger SMTP)
 const transporter = nodemailer.createTransport({
-  service: "gmail",
+  host: "smtp.hostinger.com",
+  port: 465,
+  secure: true,
   auth: {
     user: process.env.SMTP_USER,
     pass: process.env.SMTP_PASS,
@@ -44,15 +46,15 @@ const sendOrderEmails = async (order) => {
 
     const orderDate = new Date(order.orderTime).toLocaleString();
 
-    // ---------------- USER EMAIL ----------------
+    // ---------------- CUSTOMER EMAIL ----------------
     await transporter.sendMail({
-      from: process.env.SMTP_USER,
+      from: `"XPoint" <${process.env.SMTP_USER}>`,
       to: order.email,
       subject: "Order Placed Successfully",
       html: `
         <h3>Hi ${order.name},</h3>
         <p>Your order has been placed successfully.</p>
-        <p>Please wait for confirmation from our team.</p>
+        <p>Kindly wait for confirmation from our team.</p>
 
         <h3>Order Details:</h3>
 
@@ -83,9 +85,9 @@ const sendOrderEmails = async (order) => {
     await transporter.sendMail({
       from: process.env.SMTP_USER,
       to: process.env.SMTP_USER,
-      subject: "New Order Placed",
+      subject: "New Order Received",
       html: `
-        <h2>New Order Received, check dashboard for further action.</h2>
+        <h2>Another ordrer reveived, check dashboard for further action.</h2>
 
         <p><b>Name:</b> ${order.name}</p>
         <p><b>Email:</b> ${order.email}</p>
@@ -116,16 +118,15 @@ const sendOrderEmails = async (order) => {
       `,
     });
 
-    console.log("✅ Emails sent");
+    console.log("Emails sent");
   } catch (error) {
-    console.error("❌ Email error:", error);
+    console.error("Email error:", error);
   }
 };
 
 // -------------------- MongoDB --------------------
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@xpointcluster.j3qynmm.mongodb.net/?retryWrites=true&w=majority&appName=XpointCluster`;
 
-// Create a MongoClient with a MongoClientOptions object to set the Stable API version
 const client = new MongoClient(uri, {
   serverApi: {
     version: ServerApiVersion.v1,
@@ -436,5 +437,5 @@ async function run() {
 run().catch(console.dir);
 
 app.listen(port, () => {
-  console.log(`Example app listening on port ${port}`)
+  console.log(`XPoint web listening on port ${port}`)
 })
