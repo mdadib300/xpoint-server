@@ -81,10 +81,13 @@ const sendOrderEmails = async (order) => {
       `,
     });
 
+    // SMALL DELAY
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
     // ---------------- ADMIN EMAIL ----------------
     await transporter.sendMail({
       from: `"XPoint Orders" <${process.env.SMTP_USER}>`,
-      to: [process.env.SMTP_USER, "xpoint387@gmail.com"],
+      to: process.env.SMTP_ADMIN,
       subject: "New Order Received",
       html: `
         <h2>Another ordrer reveived, check dashboard for further action.</h2>
