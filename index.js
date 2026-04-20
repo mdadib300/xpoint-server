@@ -83,7 +83,7 @@ const sendOrderEmails = async (order) => {
 
     // ---------------- ADMIN EMAIL ----------------
     await transporter.sendMail({
-      from: process.env.SMTP_USER,
+      from: `"XPoint Orders" <${process.env.SMTP_USER}>`,
       to: process.env.SMTP_USER,
       subject: "New Order Received",
       html: `
