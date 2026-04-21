@@ -36,7 +36,7 @@ const sendOrderEmails = async (order) => {
     const orderDate = new Date(order.orderTime).toLocaleString();
     // ---------------- CUSTOMER EMAIL ----------------
     await resend.emails.send({
-      from: "XPoint <onboarding@resend.dev>",
+      from: "XPoint <info@xpointbd.com>",
       to: order.email,
       subject: "Order Placed Successfully",
       html: `
@@ -139,7 +139,9 @@ async function run() {
     // jwt related api
     app.post('/jwt', async (req, res) => {
       const user = req.body;
-      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, { expiresIn: '1hr' });
+      const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
+        expiresIn: '7d'
+      });
       res.send({ token });
     })
 
