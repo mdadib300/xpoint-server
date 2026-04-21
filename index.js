@@ -71,7 +71,7 @@ const sendOrderEmails = async (order) => {
 
     // ---------------- ADMIN EMAIL ----------------
     await resend.emails.send({
-      from: "XPoint Orders <onboarding@resend.dev>",
+      from: "XPoint Orders <info@xpointbd.com>",
       to: process.env.ADMIN_EMAIL,
       subject: "New Order Received",
       html: `
