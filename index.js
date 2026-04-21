@@ -6,7 +6,7 @@ const app = express()
 const port = process.env.PORT || 3000
 require('dotenv').config()
 const jwt = require('jsonwebtoken');
-import { Resend } from 'resend';
+const { Resend } = require('resend');
 
 
 // Middlewares
@@ -42,7 +42,7 @@ const sendOrderEmails = async (order) => {
       html: `
         <h3>Hi ${order.name},</h3>
         <p>Your order has been placed successfully.</p>
-        <p>Kindly wait for confirmation from our team.</p>
+        <p><b>Order Time:</b> ${orderDate}</p>
 
         <h3>Order Details:</h3>
 
@@ -64,6 +64,9 @@ const sendOrderEmails = async (order) => {
         <p><b>Total: ${order.amount} BDT</b></p>
         <p><b>Payment:</b> ${order.paymentMethod}</p>
         
+        <p>You need to pay (bKash Payment) 200 BDT in advance when we confirm the order.</p>
+        <p>bKash Payment Number: 01318551565</p>
+        <p>Kindly wait for confirmation from our team.</p>
         <p>We will contact you soon.</p>
         <p>- XPoint</p>
       `,
@@ -106,10 +109,10 @@ const sendOrderEmails = async (order) => {
       `,
     });
 
-    console.log("✅ Emails sent with Resend");
+    console.log("Emails sent");
 
   } catch (error) {
-    console.error("❌ Email error:", error);
+    console.error("Email error:", error);
   }
 };
 
@@ -339,82 +342,237 @@ async function run() {
       res.send(result);
     })
 
-    // Adding products to Cart
+    // Add to cart (with duplicate handling + default quantity)
     app.post('/cart', async (req, res) => {
-      const productData = req.body;
-      const result = await cartCollection.insertOne(productData);
-      res.send(result);
-    })
+      try {
+        const productData = req.body;
 
-    // Getting the products added to the cart (Specific user's data)
-    app.get('/cart', async (req, res) => {
-      const email = req.query.email;
-      const query = { email: email };
-      const cursor = cartCollection.find(query);
-      const allProductsInCart = await cursor.toArray();
-      res.send(allProductsInCart);
-    })
+        const query = {
+          email: productData.email,
+          productId: productData.productId,
+          size: productData.size,
+          color: productData.color
+        };
 
-    // Delete cart item from user dashboard cart
-    app.delete('/cart/:id', async (req, res) => {
-      const id = req.params.id;
-      const query = { _id: new ObjectId(id) }
-      const result = await cartCollection.deleteOne(query);
-      res.send(result);
-    })
+        const existing = await cartCollection.findOne(query);
 
-    // posting orders to orders server
-    app.post('/orders', async (req, res) => {
-      const order = req.body;
+        // If exists → ADD selected quantity (NOT just +1)
+        if (existing) {
+          const result = await cartCollection.updateOne(
+            { _id: existing._id },
+            { $inc: { quantity: productData.quantity || 1 } }
+          );
 
-      const result = await ordersCollection.insertOne(order);
+          return res.send({
+            message: "quantity_updated",
+            result
+          });
+        }
 
-      if (result.insertedId) {
-        sendOrderEmails(order); // NodeMailer Email
+        // New item
+        const cartItem = {
+          ...productData,
+          quantity: productData.quantity || 1,
+          price: productData.price // unit price
+        };
+
+        const result = await cartCollection.insertOne(cartItem);
+
+        res.send({
+          message: "item_added",
+          result
+        });
+
+      } catch (error) {
+        console.error(error);
+        res.status(500).send({ message: "error" });
       }
-
-      res.send(result);
     });
 
-    // getting the order info for the specific user
+
+    // Get cart items (user specific)
+    app.get('/cart', async (req, res) => {
+      try {
+        const email = req.query.email;
+        const query = { email: email };
+
+        const cursor = cartCollection.find(query);
+        const allProductsInCart = await cursor.toArray();
+
+        res.send(allProductsInCart);
+
+      } catch (error) {
+        console.error("Error fetching cart:", error);
+        res.status(500).send({ message: "Failed to fetch cart" });
+      }
+    });
+
+
+    // Delete cart item
+    app.delete('/cart/:id', async (req, res) => {
+      try {
+        const id = req.params.id;
+
+        const result = await cartCollection.deleteOne({
+          _id: new ObjectId(id)
+        });
+
+        res.send(result);
+
+      } catch (error) {
+        console.error("Error deleting cart item:", error);
+        res.status(500).send({ message: "Failed to delete item" });
+      }
+    });
+
+
+    // Update quantity
+    app.patch('/cart/:id', async (req, res) => {
+      try {
+        const id = req.params.id;
+        const { quantity } = req.body;
+
+        // Validation
+        if (!quantity || quantity < 1) {
+          return res.status(400).send({
+            message: "Quantity must be at least 1"
+          });
+        }
+
+        const result = await cartCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { quantity } }
+        );
+
+        res.send(result);
+
+      } catch (error) {
+        console.error("Error updating quantity:", error);
+        res.status(500).send({ message: "Failed to update quantity" });
+      }
+    });
+
+    // ================= CREATE ORDER =================
+    app.post('/orders', async (req, res) => {
+      try {
+        const orderData = req.body;
+
+        // calculate total
+        const calculatedAmount = orderData.cartItems.reduce(
+          (total, item) => total + item.price * (item.quantity || 1),
+          0
+        );
+
+        const order = {
+          ...orderData,
+          amount: calculatedAmount, // FIXED TOTAL
+          status: "Pending",
+          orderTime: new Date()
+        };
+
+        const result = await ordersCollection.insertOne(order);
+
+        if (result.insertedId) {
+          sendOrderEmails(order);
+        }
+
+        res.send({
+          insertedId: result.insertedId,
+          amount: calculatedAmount
+        });
+
+      } catch (error) {
+        console.error("Order creation error:", error);
+        res.status(500).send({ message: "Failed to create order" });
+      }
+    });
+
+
+    // ================= GET USER ORDERS =================
     app.get('/orders', async (req, res) => {
-      const email = req.query.email;
-      const query = { email: email };
-      const cursor = ordersCollection.find(query);
-      const orders = await cursor.toArray();
-      res.send(orders);
-    })
+      try {
+        const email = req.query.email;
 
-    // cancel order from user dashboard orders
+        const orders = await ordersCollection
+          .find({ email })
+          .sort({ _id: -1 })
+          .toArray();
+
+        res.send(orders);
+
+      } catch (error) {
+        console.error("Fetch orders error:", error);
+        res.status(500).send({ message: "Failed to fetch orders" });
+      }
+    });
+
+
+    // ================= CANCEL ORDER (USER) =================
     app.delete('/orders/:id', async (req, res) => {
-      const id = req.params.id;
-      const query = { _id: new ObjectId(id) }
-      const result = await ordersCollection.deleteOne(query);
-      res.send(result);
-    })
+      try {
+        const id = req.params.id;
 
-    // Get all orders (ADMIN ONLY)
+        const result = await ordersCollection.deleteOne({
+          _id: new ObjectId(id)
+        });
+
+        res.send(result);
+
+      } catch (error) {
+        console.error("Cancel order error:", error);
+        res.status(500).send({ message: "Failed to cancel order" });
+      }
+    });
+
+
+    // ================= GET ALL ORDERS (ADMIN) =================
     app.get('/allOrders', verifyToken, verifyAdmin, async (req, res) => {
-      const result = await ordersCollection.find().toArray();
-      res.send(result);
+      try {
+        const result = await ordersCollection.find().toArray();
+        res.send(result);
+
+      } catch (error) {
+        console.error("Admin fetch orders error:", error);
+        res.status(500).send({ message: "Failed to fetch all orders" });
+      }
     });
 
-    // Order cancel or confirm (ADMIN ONLY)
+
+    // ================= UPDATE ORDER STATUS (ADMIN) =================
     app.patch('/orders/:id', verifyToken, verifyAdmin, async (req, res) => {
-      const id = req.params.id;
-      const { status } = req.body;
-      const result = await ordersCollection.updateOne(
-        { _id: new ObjectId(id) },
-        { $set: { status: status } }
-      );
-      res.send(result);
+      try {
+        const id = req.params.id;
+        const { status } = req.body;
+
+        const result = await ordersCollection.updateOne(
+          { _id: new ObjectId(id) },
+          { $set: { status } }
+        );
+
+        res.send(result);
+
+      } catch (error) {
+        console.error("Update order error:", error);
+        res.status(500).send({ message: "Failed to update order" });
+      }
     });
 
-    // order delete (ADMIN ONLY)
+
+    // ================= DELETE ORDER (ADMIN) =================
     app.delete('/orders/:id', verifyToken, verifyAdmin, async (req, res) => {
-      const id = req.params.id;
-      const result = await ordersCollection.deleteOne({ _id: new ObjectId(id) });
-      res.send(result);
+      try {
+        const id = req.params.id;
+
+        const result = await ordersCollection.deleteOne({
+          _id: new ObjectId(id)
+        });
+
+        res.send(result);
+
+      } catch (error) {
+        console.error("Delete order error:", error);
+        res.status(500).send({ message: "Failed to delete order" });
+      }
     });
 
     // Send a ping to confirm a successful connection
