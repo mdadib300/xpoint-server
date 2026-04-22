@@ -9,7 +9,7 @@ const jwt = require('jsonwebtoken');
 const { Resend } = require('resend');
 
 
-// Middlewares
+// MiddleWares
 app.use(cors())
 app.use(express.json())
 
@@ -20,7 +20,7 @@ app.get('/', (req, res) => {
 // Resend api key
 const resend = new Resend(process.env.RESEND_API_KEY);
 
-// Email function (resend)
+// Email function (Resend)
 const sendOrderEmails = async (order) => {
   try {
     const cartItemsHtml = order.cartItems.map(item => `
@@ -139,7 +139,7 @@ async function run() {
     const usersCollection = client.db("xpointDB").collection("usersCollection");
     const ordersCollection = client.db("xpointDB").collection("ordersCollection");
 
-    // jwt related api
+    // JSON Web Token related api
     app.post('/jwt', async (req, res) => {
       const user = req.body;
       const token = jwt.sign(user, process.env.ACCESS_TOKEN_SECRET, {
@@ -174,7 +174,7 @@ async function run() {
 
 
 
-    // middleswares
+    // Middlewares
     const verifyToken = (req, res, next) => {
       console.log('inside verify token', req.headers.authorization);
       if (!req.headers.authorization) {
