@@ -133,7 +133,7 @@ async function run() {
     // Connect the client to the server	(optional starting in v4.7)
     // await client.connect();
 
-    ///////////////////////////////// COLLECTIONS
+    // COLLECTIONS
     const productsCollection = client.db("xpointDB").collection("productsCollection");
     const cartCollection = client.db("xpointDB").collection("cartCollection");
     const usersCollection = client.db("xpointDB").collection("usersCollection");
@@ -276,11 +276,13 @@ async function run() {
 
     // Displaying the products in the UI 
     app.get('/products', async (req, res) => {
-      const cursor = productsCollection
-        .find()
-        .sort({ _id: -1 }); // latest products first
-
-      const allProducts = await cursor.toArray();
+      const limit = parseInt(req.query.limit);
+      let query = productsCollection.find();
+      query = query.sort({ _id: -1 });
+      if (limit) {
+        query = query.limit(limit);
+      }
+      const allProducts = await query.toArray();
       res.send(allProducts);
     });
 
