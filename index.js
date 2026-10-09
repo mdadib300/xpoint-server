@@ -34,7 +34,7 @@ const sendOrderEmails = async (order) => {
     `).join('');
 
     const orderDate = new Date(order.orderTime).toLocaleString();
-    // ---------------- CUSTOMER EMAIL ----------------
+    // ---------------- CUSTOMER EMAIL (Resend) ----------------
     await resend.emails.send({
       from: "XPoint <info@xpointbd.com>",
       to: order.email,
