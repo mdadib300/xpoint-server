@@ -336,6 +336,56 @@ async function run() {
       res.send(result);
     });
 
+
+    // Stock Out / Restock product (ADMIN ONLY)
+    app.patch('/products/:id/stock', verifyToken, verifyAdmin, async (req, res) => {
+      try {
+        const id = req.params.id;
+        const { isStockOut } = req.body;
+
+        if (!ObjectId.isValid(id)) {
+          return res.status(400).send({
+            message: "Invalid product ID"
+          });
+        }
+
+        if (typeof isStockOut !== "boolean") {
+          return res.status(400).send({
+            message: "Invalid stock status"
+          });
+        }
+
+        const filter = { _id: new ObjectId(id) };
+
+        const updatedDoc = {
+          $set: {
+            isStockOut: isStockOut
+          }
+        };
+
+        const result = await productsCollection.updateOne(
+          filter,
+          updatedDoc
+        );
+
+        if (result.matchedCount === 0) {
+          return res.status(404).send({
+            message: "Product not found"
+          });
+        }
+
+        res.send(result);
+
+      } catch (error) {
+        console.error("Stock update error:", error);
+
+        res.status(500).send({
+          message: "Failed to update stock status"
+        });
+      }
+    });
+
+
     // Getting products details for the Product Details page when clicked to View Details
     app.get('/products/:id', verifyToken, verifyAdmin, async (req, res) => {
       const id = req.params.id;
@@ -345,9 +395,34 @@ async function run() {
     })
 
     // Add to cart (with duplicate handling + default quantity)
+    
+    // Add to cart (with duplicate handling + default quantity)
     app.post('/cart', async (req, res) => {
       try {
         const productData = req.body;
+
+        // CHECK PRODUCT STOCK STATUS
+        if (!ObjectId.isValid(productData.productId)) {
+          return res.status(400).send({
+            message: "Invalid product ID"
+          });
+        }
+
+        const product = await productsCollection.findOne({
+          _id: new ObjectId(productData.productId)
+        });
+
+        if (!product) {
+          return res.status(404).send({
+            message: "Product not found"
+          });
+        }
+
+        if (product.isStockOut === true) {
+          return res.status(409).send({
+            message: "product_out_of_stock"
+          });
+        }
 
         const query = {
           email: productData.email,
@@ -390,6 +465,7 @@ async function run() {
         res.status(500).send({ message: "error" });
       }
     });
+
 
 
     // Get cart items (user specific)
@@ -455,9 +531,43 @@ async function run() {
     });
 
     // ================= CREATE ORDER =================
+    
+    // ================= CREATE ORDER =================
     app.post('/orders', async (req, res) => {
       try {
         const orderData = req.body;
+
+        // CHECK STOCK AVAILABILITY BEFORE ORDER
+        if (!Array.isArray(orderData.cartItems) || orderData.cartItems.length === 0) {
+          return res.status(400).send({
+            message: "Cart is empty or invalid"
+          });
+        }
+
+        for (const item of orderData.cartItems) {
+          if (!ObjectId.isValid(item.productId)) {
+            return res.status(400).send({
+              message: "Invalid product ID in cart"
+            });
+          }
+
+          const product = await productsCollection.findOne({
+            _id: new ObjectId(item.productId)
+          });
+
+          if (!product) {
+            return res.status(404).send({
+              message: "A product in your cart no longer exists"
+            });
+          }
+
+          if (product.isStockOut === true) {
+            return res.status(409).send({
+              message: "product_out_of_stock",
+              productName: product.name
+            });
+          }
+        }
 
         // calculate total
         const calculatedAmount = orderData.cartItems.reduce(
@@ -488,6 +598,7 @@ async function run() {
         res.status(500).send({ message: "Failed to create order" });
       }
     });
+
 
 
     // ================= GET USER ORDERS =================
