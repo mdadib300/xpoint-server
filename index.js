@@ -325,6 +325,7 @@ async function run() {
           price: product.price,
           discountPrice: product.discountPrice || null,
           fit: product.fit,
+          brand: product.brand,
           sizes: product.sizes,
           colors: product.colors,
           description: product.description,
